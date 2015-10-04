@@ -35,6 +35,8 @@ module PremierLeague =
         if goalsFor > goalsAgainst then 3
         elif goalsFor = goalsAgainst then 1 
         else 0
+                                                                                                    
+    let order standing = standing.Points, standing.GoalDifference, standing.GoalsFor, standing.Team
 
 module LaLiga =
 
@@ -55,6 +57,8 @@ module LaLiga =
         if goalsFor > goalsAgainst then 3
         elif goalsFor = goalsAgainst then 1 
         else 0
+
+    let order standing = standing.Points, standing.GoalDifference, standing.GoalsFor, standing.Team
 
 module Games =
    
@@ -85,7 +89,7 @@ module Games =
 
     let initialResults team = { Team = team; Points = 0; GoalsFor = 0; GoalsAgainst = 0; GoalDifference = 0; GamesPlayed = 0 }
 
-    let createLeagueTable results = 
+    let createLeagueTable sort results = 
         results
         // Group by team
         |> Seq.groupBy (fun result -> result.Team)
@@ -97,17 +101,16 @@ module Games =
             |> Seq.fold addResult (initialResults team)
         )
         // Sort results by points, then goal difference
-        |> Seq.sortByDescending (fun standing -> standing.Points, standing.GoalDifference, standing.GoalsFor, standing.Team)
+        |> Seq.sortByDescending sort
 
-    let displayTableInConsole results =
+    let displayTableInConsole table =
         
         // Print table heading
         printfn "%-30s %-2s %-3s %-3s %-3s %-2s" "Team" "Pd" "GD" "GF" "GA" "Pt"
 
         let printRow result = printfn "%-30s %2i %3i %3i %3i %2i" result.Team result.GamesPlayed result.GoalDifference result.GoalsFor result.GoalsAgainst result.Points
 
-        // Create a table
-        createLeagueTable results
+        table
         // Print results
         |> Seq.iter printRow 
             
@@ -120,6 +123,8 @@ module Games =
         []
         // Add all the games from the data source
         |> addGames PremierLeague.calcPoints games
+        // Create a table
+        |> createLeagueTable PremierLeague.order
         // Display the table
         |> displayTableInConsole
 
@@ -132,6 +137,8 @@ module Games =
         []
         // Add all the games from the data source
         |> addGames LaLiga.calcPoints games
+        // Create a table
+        |> createLeagueTable LaLiga.order
         // Display the table
         |> displayTableInConsole
                                        
