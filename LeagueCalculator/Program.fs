@@ -16,28 +16,43 @@ type GameResult = {
     GamesPlayed: int
 }
 
-module Games =
-    
+module PremierLeague =
+
+    open FSharp.Data
+
+    let getData () = 
+        
+        let convertRow (row: CsvRow) =
+            {   HomeTeam = (row.["HomeTeam"]); 
+                HomeGoals = (row.["FTHG"].AsInteger()); 
+                AwayTeam = (row.["AwayTeam"]); 
+                AwayGoals = (row.["FTAG"].AsInteger())}
+        
+        CsvFile.Load("http://www.football-data.co.uk/mmz4281/1516/E0.csv").Cache().Rows
+        |> Seq.map convertRow
+
     let calcPoints goalsFor goalsAgainst = 
         if goalsFor > goalsAgainst then 3
         elif goalsFor = goalsAgainst then 1 
         else 0
 
-    let resultsForGame game =
+module Games =
+   
+    let resultsForGame calcPoints game =
         let homeTeamResult = { Team = game.HomeTeam; Points = (calcPoints game.HomeGoals game.AwayGoals); GoalsFor = game.HomeGoals; GoalsAgainst = game.AwayGoals; GoalDifference = game.HomeGoals - game.AwayGoals; GamesPlayed = 1 }
         let awayTeamResult = { Team = game.AwayTeam; Points = (calcPoints game.AwayGoals game.HomeGoals); GoalsFor = game.AwayGoals; GoalsAgainst = game.HomeGoals; GoalDifference = game.AwayGoals - game.HomeGoals; GamesPlayed = 1 }
         homeTeamResult, awayTeamResult
 
-    let addGame game previousResults = 
-        let homeTeamResult, awayTeamResult = resultsForGame game
+    let addGame calcPoints game previousResults = 
+        let homeTeamResult, awayTeamResult = resultsForGame calcPoints game
         previousResults @ [homeTeamResult; awayTeamResult]
 
-    let rec addGames games results =
+    let rec addGames calcPoints games results =
         match games with
         | [] -> results
         | game :: remainingGames -> 
-            addGame game results 
-            |> addGames remainingGames
+            addGame calcPoints game results 
+            |> addGames calcPoints remainingGames
 
     let addResult previousResults result =
         { result with 
@@ -76,29 +91,14 @@ module Games =
         // Print results
         |> Seq.iter printRow 
             
-    open FSharp.Data
-
-    let getWebData () = 
-        
-        let gameData = CsvFile.Load("http://www.football-data.co.uk/mmz4281/1516/E0.csv").Cache()
-
-        let convertRow (row: CsvRow) =
-            {   HomeTeam = (row.["HomeTeam"]); 
-                HomeGoals = (row.["FTHG"].AsInteger()); 
-                AwayTeam = (row.["AwayTeam"]); 
-                AwayGoals = (row.["FTAG"].AsInteger())}
-        
-        gameData.Rows
-        |> Seq.map convertRow
-
     [<EntryPoint>]
     let main args =
         // Load data for games
-        let games = getWebData () |> Seq.toList
+        let games = PremierLeague.getData() |> Seq.toList
         // Start with empty list of results
         []
         // Add all the games from the data source
-        |> addGames games
+        |> addGames PremierLeague.calcPoints games
         // Display the table
         |> displayTableInConsole
 
