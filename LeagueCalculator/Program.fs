@@ -36,6 +36,26 @@ module PremierLeague =
         elif goalsFor = goalsAgainst then 1 
         else 0
 
+module LaLiga =
+
+    open FSharp.Data
+
+    let getData () = 
+        
+        let convertRow (row: CsvRow) =
+            {   HomeTeam = (row.["HomeTeam"]); 
+                HomeGoals = (row.["FTHG"].AsInteger()); 
+                AwayTeam = (row.["AwayTeam"]); 
+                AwayGoals = (row.["FTAG"].AsInteger())}
+        
+        CsvFile.Load("http://www.football-data.co.uk/mmz4281/1516/SP1.csv").Cache().Rows
+        |> Seq.map convertRow
+
+    let calcPoints goalsFor goalsAgainst = 
+        if goalsFor > goalsAgainst then 3
+        elif goalsFor = goalsAgainst then 1 
+        else 0
+
 module Games =
    
     let resultsForGame calcPoints game =
@@ -93,7 +113,8 @@ module Games =
             
     [<EntryPoint>]
     let main args =
-        // Load data for games
+        
+        // Load data for Premier league games
         let games = PremierLeague.getData() |> Seq.toList
         // Start with empty list of results
         []
@@ -102,6 +123,18 @@ module Games =
         // Display the table
         |> displayTableInConsole
 
+        // Add blank line
+        System.Console.WriteLine()
+
+        // Load data for games
+        let games = LaLiga.getData() |> Seq.toList
+        // Start with empty list of results
+        []
+        // Add all the games from the data source
+        |> addGames LaLiga.calcPoints games
+        // Display the table
+        |> displayTableInConsole
+                                       
         System.Console.ReadKey() |> ignore
         
         0
