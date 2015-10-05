@@ -16,50 +16,6 @@ type GameResult = {
     GamesPlayed: int
 }
 
-module PremierLeague =
-
-    open FSharp.Data
-
-    let getData () = 
-        
-        let convertRow (row: CsvRow) =
-            {   HomeTeam = (row.["HomeTeam"]); 
-                HomeGoals = (row.["FTHG"].AsInteger()); 
-                AwayTeam = (row.["AwayTeam"]); 
-                AwayGoals = (row.["FTAG"].AsInteger())}
-        
-        CsvFile.Load("http://www.football-data.co.uk/mmz4281/1516/E0.csv").Cache().Rows
-        |> Seq.map convertRow
-
-    let calcPoints goalsFor goalsAgainst = 
-        if goalsFor > goalsAgainst then 3
-        elif goalsFor = goalsAgainst then 1 
-        else 0
-                                                                                                    
-    let order standing = standing.Points, standing.GoalDifference, standing.GoalsFor, standing.Team
-
-module LaLiga =
-
-    open FSharp.Data
-
-    let getData () = 
-        
-        let convertRow (row: CsvRow) =
-            {   HomeTeam = (row.["HomeTeam"]); 
-                HomeGoals = (row.["FTHG"].AsInteger()); 
-                AwayTeam = (row.["AwayTeam"]); 
-                AwayGoals = (row.["FTAG"].AsInteger())}
-        
-        CsvFile.Load("http://www.football-data.co.uk/mmz4281/1516/SP1.csv").Cache().Rows
-        |> Seq.map convertRow
-
-    let calcPoints goalsFor goalsAgainst = 
-        if goalsFor > goalsAgainst then 3
-        elif goalsFor = goalsAgainst then 1 
-        else 0
-
-    let order standing = standing.Points, standing.GoalDifference, standing.GoalsFor, standing.Team
-
 module Games =
    
     let resultsForGame calcPoints game =
@@ -101,9 +57,68 @@ module Games =
             |> Seq.fold addResult (initialResults team)
         )
         // Sort results by points, then goal difference
-        |> Seq.sortByDescending sort
+        |> sort
 
+module PremierLeague =
+
+    open FSharp.Data
+
+    let getData () = 
+        
+        let convertRow (row: CsvRow) =
+            {   HomeTeam = (row.["HomeTeam"]); 
+                HomeGoals = (row.["FTHG"].AsInteger()); 
+                AwayTeam = (row.["AwayTeam"]); 
+                AwayGoals = (row.["FTAG"].AsInteger())}
+        
+        CsvFile.Load("http://www.football-data.co.uk/mmz4281/1516/E0.csv").Cache().Rows
+        |> Seq.map convertRow
+
+    let calcPoints goalsFor goalsAgainst = 
+        if goalsFor > goalsAgainst then 3
+        elif goalsFor = goalsAgainst then 1 
+        else 0
+                                                                                                    
+    let order standings = 
+        standings
+        |> Seq.sortByDescending (fun standing -> standing.Points, standing.GoalDifference, standing.GoalsFor, standing.Team)    
+
+module LaLiga =
+
+    open FSharp.Data
+
+    let getData () = 
+        
+        let convertRow (row: CsvRow) =
+            {   HomeTeam = (row.["HomeTeam"]); 
+                HomeGoals = (row.["FTHG"].AsInteger()); 
+                AwayTeam = (row.["AwayTeam"]); 
+                AwayGoals = (row.["FTAG"].AsInteger())}
+        
+        CsvFile.Load("http://www.football-data.co.uk/mmz4281/1516/SP1.csv").Cache().Rows
+        |> Seq.map convertRow
+
+    let calcPoints goalsFor goalsAgainst = 
+        if goalsFor > goalsAgainst then 3
+        elif goalsFor = goalsAgainst then 1 
+        else 0
+
+    let order standings = 
+        standings
+        |> Seq.sortByDescending (fun standing -> standing.Points, standing.GoalDifference, standing.GoalsFor, standing.Team)
+
+module Program = 
+            
     let displayTableInConsole table =
+       
+        let cprintfn c fmt =
+            Printf.kbprintf
+                (fun s ->
+                    let orig = System.Console.ForegroundColor
+                    System.Console.ForegroundColor <- c
+                    System.Console.WriteLine(s)
+                    System.Console.ForegroundColor <- orig)
+                fmt
         
         // Print table heading
         printfn "%-30s %-2s %-3s %-3s %-3s %-2s" "Team" "Pd" "GD" "GF" "GA" "Pt"
@@ -113,35 +128,21 @@ module Games =
         table
         // Print results
         |> Seq.iter printRow 
-            
+
     [<EntryPoint>]
     let main args =
-        
+       
         // Load data for Premier league games
         let games = PremierLeague.getData() |> Seq.toList
         // Start with empty list of results
         []
         // Add all the games from the data source
-        |> addGames PremierLeague.calcPoints games
+        |> Games.addGames PremierLeague.calcPoints games
         // Create a table
-        |> createLeagueTable PremierLeague.order
+        |> Games.createLeagueTable PremierLeague.order
         // Display the table
         |> displayTableInConsole
-
-        // Add blank line
-        System.Console.WriteLine()
-
-        // Load data for games
-        let games = LaLiga.getData() |> Seq.toList
-        // Start with empty list of results
-        []
-        // Add all the games from the data source
-        |> addGames LaLiga.calcPoints games
-        // Create a table
-        |> createLeagueTable LaLiga.order
-        // Display the table
-        |> displayTableInConsole
-                                       
+                                             
         System.Console.ReadKey() |> ignore
-        
+
         0
