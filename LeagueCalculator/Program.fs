@@ -142,7 +142,23 @@ module Program =
         |> Games.createLeagueTable PremierLeague.order
         // Display the table
         |> displayTableInConsole
-                                             
+
+        // Add blank line
+        System.Console.WriteLine()
+        
+        System.Console.ReadKey() |> ignore
+
+        // Load data for games
+        let games = LaLiga.getData() |> Seq.toList
+        // Start with empty list of results
+        []
+        // Add all the games from the data source
+        |> Games.addGames LaLiga.calcPoints games
+        // Create a table
+        |> Games.createLeagueTable LaLiga.order
+        // Display the table
+        |> displayTableInConsole
+                                                     
         System.Console.ReadKey() |> ignore
 
         0
