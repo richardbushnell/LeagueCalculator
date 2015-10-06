@@ -1,5 +1,7 @@
 ﻿namespace LeagueCalculator
 
+open System
+
 type GameScore = {
     HomeTeam: string
     AwayTeam: string
@@ -33,6 +35,9 @@ module Games =
         | game :: remainingGames -> 
             addGame calcPoints game results 
             |> addGames calcPoints remainingGames
+
+    let toResults calcPoints games =
+        [] |> addGames calcPoints games
 
     let addResult previousResults result =
         { result with 
@@ -111,54 +116,49 @@ module Program =
             
     let displayTableInConsole table =
        
-        let cprintfn c fmt =
-            Printf.kbprintf
-                (fun s ->
-                    let orig = System.Console.ForegroundColor
-                    System.Console.ForegroundColor <- c
-                    System.Console.WriteLine(s)
-                    System.Console.ForegroundColor <- orig)
-                fmt
-        
+        let cprintfn c =
+            Printf.kprintf (fun s ->
+                    let orig = Console.ForegroundColor
+                    Console.ForegroundColor <- c
+                    Console.WriteLine(s)
+                    Console.ForegroundColor <- orig)
+                        
         // Print table heading
-        printfn "%-30s %-2s %-3s %-3s %-3s %-2s" "Team" "Pd" "GD" "GF" "GA" "Pt"
+        cprintfn ConsoleColor.Red "%-30s %-2s %-3s %-3s %-3s %-2s" "Team" "Pd" "GD" "GF" "GA" "Pt"
 
         let printRow result = printfn "%-30s %2i %3i %3i %3i %2i" result.Team result.GamesPlayed result.GoalDifference result.GoalsFor result.GoalsAgainst result.Points
 
-        table
         // Print results
-        |> Seq.iter printRow 
+        table |> Seq.iter printRow 
 
     [<EntryPoint>]
     let main args =
        
         // Load data for Premier league games
-        let games = PremierLeague.getData() |> Seq.toList
-        // Start with empty list of results
-        []
+        PremierLeague.getData()
+        |> Seq.toList
         // Add all the games from the data source
-        |> Games.addGames PremierLeague.calcPoints games
+        |> Games.toResults PremierLeague.calcPoints
         // Create a table
         |> Games.createLeagueTable PremierLeague.order
         // Display the table
         |> displayTableInConsole
 
         // Add blank line
-        System.Console.WriteLine()
+        Console.WriteLine()
         
-        System.Console.ReadKey() |> ignore
+        Console.ReadKey() |> ignore
 
         // Load data for games
-        let games = LaLiga.getData() |> Seq.toList
-        // Start with empty list of results
-        []
+        LaLiga.getData() 
+        |> Seq.toList
         // Add all the games from the data source
-        |> Games.addGames LaLiga.calcPoints games
+        |> Games.toResults LaLiga.calcPoints
         // Create a table
         |> Games.createLeagueTable LaLiga.order
         // Display the table
         |> displayTableInConsole
                                                      
-        System.Console.ReadKey() |> ignore
+        Console.ReadKey() |> ignore
 
         0
