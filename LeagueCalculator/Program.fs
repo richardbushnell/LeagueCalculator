@@ -2,14 +2,41 @@
 
 open System
 
-type GameScore = {
-    HomeTeam: string
-    AwayTeam: string
-    HomeGoals: int
-    AwayGoals: int
-}
+type GameOutcome =
+| Win
+| Loss
+| Draw
+
+type GameLocation =
+| Home
+| Away
+
+type TeamResult = {
+        Team: string
+        Opposition: string
+        Location: GameLocation
+        PlayedOn: DateTime
+        GoalsFor: int
+        GoalsAgainst: int
+    } with
+    member this.Outcome =
+        if this.GoalsFor > this.GoalsAgainst then Win
+        elif this.GoalsFor = this.GoalsAgainst then Draw 
+        else Loss
 
 type GameResult = {
+        PlayedOn: DateTime
+        HomeTeam: string
+        AwayTeam: string
+        HomeGoals: int
+        AwayGoals: int
+    } with
+    member this.HomeTeamResult =
+        { Team = this.HomeTeam; Opposition = this.AwayTeam; Location = Home; PlayedOn = this.PlayedOn; GoalsFor = this.HomeGoals; GoalsAgainst = this.AwayGoals }
+    member this.AwayTeamResult = 
+        { Team = this.AwayTeam; Opposition = this.HomeTeam; Location = Away; PlayedOn = this.PlayedOn; GoalsFor = this.AwayGoals; GoalsAgainst = this.HomeGoals }
+
+type Standing = {
     Team: string
     Points: int
     GoalsFor: int
@@ -20,93 +47,118 @@ type GameResult = {
 
 module Games =
    
-    let resultsForGame calcPoints game =
-        let homeTeamResult = { Team = game.HomeTeam; Points = (calcPoints game.HomeGoals game.AwayGoals); GoalsFor = game.HomeGoals; GoalsAgainst = game.AwayGoals; GoalDifference = game.HomeGoals - game.AwayGoals; GamesPlayed = 1 }
-        let awayTeamResult = { Team = game.AwayTeam; Points = (calcPoints game.AwayGoals game.HomeGoals); GoalsFor = game.AwayGoals; GoalsAgainst = game.HomeGoals; GoalDifference = game.AwayGoals - game.HomeGoals; GamesPlayed = 1 }
-        homeTeamResult, awayTeamResult
+    let initialStanding team = { Team = team; Points = 0; GoalsFor = 0; GoalsAgainst = 0; GoalDifference = 0; GamesPlayed = 0 }
 
-    let addGame calcPoints game previousResults = 
-        let homeTeamResult, awayTeamResult = resultsForGame calcPoints game
-        previousResults @ [homeTeamResult; awayTeamResult]
+    let toStanding calcPoints (lastStanding: Standing) (teamResult: TeamResult) : Standing =
+        {   Team = teamResult.Team; 
+            Points = lastStanding.Points + (calcPoints teamResult.Outcome); 
+            GoalsFor = lastStanding.GoalsFor + teamResult.GoalsFor; 
+            GoalsAgainst = lastStanding.GoalsAgainst + teamResult.GoalsAgainst; 
+            GoalDifference = lastStanding.GoalDifference + teamResult.GoalsFor - teamResult.GoalsAgainst; 
+            GamesPlayed = lastStanding.GamesPlayed + 1 }
+    
+    let filterByTeam team = List.filter (fun standing -> standing.Team = team)    
+    
+    let latestStandingForTeam team standings = 
+        let teamStandings = standings |> filterByTeam team
+        match teamStandings with
+        | [] -> initialStanding team
+        | _ -> teamStandings 
+            |> List.maxBy (fun standing -> standing.GamesPlayed)     
+                                       
+    let appendResult calcPoints (teamResult:TeamResult) standings = 
+        
+        let toStandingWithPoints = toStanding calcPoints
+        standings 
+        |> latestStandingForTeam teamResult.Team
+        |> toStandingWithPoints 
+        <| teamResult   
+        |> Array.create 1 
+        |> List.ofArray
+        |> List.append standings
 
-    let rec addGames calcPoints games results =
+    let rec addGames calcPoints (games:GameResult list) standings =
         match games with
-        | [] -> results
+        | [] -> standings
         | game :: remainingGames -> 
-            addGame calcPoints game results 
+            standings
+            |> appendResult calcPoints game.HomeTeamResult
+            |> appendResult calcPoints game.AwayTeamResult 
             |> addGames calcPoints remainingGames
 
     let toResults calcPoints games =
         [] |> addGames calcPoints games
 
-    let addResult previousResults result =
-        { result with 
-            Points = previousResults.Points + result.Points; 
-            GoalsFor = previousResults.GoalsFor + result.GoalsFor; 
-            GoalsAgainst = previousResults.GoalsAgainst + result.GoalsAgainst; 
-            GoalDifference = previousResults.GoalDifference + result.GoalDifference;
-            GamesPlayed = previousResults.GamesPlayed + 1
+    let addStanding previousStandings standing =
+        { standing with 
+            Points = previousStandings.Points + standing.Points; 
+            GoalsFor = previousStandings.GoalsFor + standing.GoalsFor; 
+            GoalsAgainst = previousStandings.GoalsAgainst + standing.GoalsAgainst; 
+            GoalDifference = previousStandings.GoalDifference + standing.GoalDifference;
+            GamesPlayed = previousStandings.GamesPlayed + 1
         }  
 
-    let initialResults team = { Team = team; Points = 0; GoalsFor = 0; GoalsAgainst = 0; GoalDifference = 0; GamesPlayed = 0 }
-
-    let createLeagueTable sort results = 
-        results
+    let createLeagueTable sort standings = 
+        standings
         // Group by team
-        |> Seq.groupBy (fun result -> result.Team)
-        // Add up each team's results
-        |> Seq.map (fun teamResults -> 
-            let team, results = teamResults
-            // Add up the results for the team
-            results
-            |> Seq.fold addResult (initialResults team)
+        |> Seq.groupBy (fun standing -> standing.Team)
+        // Get the team's last result
+        |> Seq.map (fun teamStandings -> 
+            let team, standings = teamStandings
+            standings |> Seq.maxBy (fun standing -> standing.GamesPlayed)
         )
         // Sort results by points, then goal difference
         |> sort
 
-module PremierLeague =
-
+module FootballData =
+    
     open FSharp.Data
 
-    let getData () = 
+    type League = string
+    
+    let EnglishPremierLeague : League = "E0"
+    let SpanishLaLiga : League = "SP1"
+
+    let getData (seasonStartYear:int) (league: League) = 
         
+        let cultureInfo = new Globalization.CultureInfo("en-GB")
+
         let convertRow (row: CsvRow) =
-            {   HomeTeam = (row.["HomeTeam"]); 
+            {   
+                PlayedOn = (row.["Date"].AsDateTime(cultureInfo))
+                HomeTeam = (row.["HomeTeam"]); 
                 HomeGoals = (row.["FTHG"].AsInteger()); 
                 AwayTeam = (row.["AwayTeam"]); 
                 AwayGoals = (row.["FTAG"].AsInteger())}
         
-        CsvFile.Load("http://www.football-data.co.uk/mmz4281/1516/E0.csv").Cache().Rows
+        let url = sprintf "http://www.football-data.co.uk/mmz4281/%2i%2i/%s.csv" seasonStartYear (seasonStartYear + 1) league 
+        
+        CsvFile.Load(url).Cache().Rows
         |> Seq.map convertRow
 
-    let calcPoints goalsFor goalsAgainst = 
-        if goalsFor > goalsAgainst then 3
-        elif goalsFor = goalsAgainst then 1 
-        else 0
-                                                                                                    
+module PremierLeague =    
+
+    let getData () = FootballData.getData 15 FootballData.EnglishPremierLeague
+
+    let calcPoints result = 
+        match result with
+        | Win -> 3
+        | Draw -> 1
+        | Loss -> 0
+                                                                                                        
     let order standings = 
         standings
         |> Seq.sortByDescending (fun standing -> standing.Points, standing.GoalDifference, standing.GoalsFor, standing.Team)    
 
 module LaLiga =
 
-    open FSharp.Data
+    let getData () = FootballData.getData 15 FootballData.SpanishLaLiga
 
-    let getData () = 
-        
-        let convertRow (row: CsvRow) =
-            {   HomeTeam = (row.["HomeTeam"]); 
-                HomeGoals = (row.["FTHG"].AsInteger()); 
-                AwayTeam = (row.["AwayTeam"]); 
-                AwayGoals = (row.["FTAG"].AsInteger())}
-        
-        CsvFile.Load("http://www.football-data.co.uk/mmz4281/1516/SP1.csv").Cache().Rows
-        |> Seq.map convertRow
-
-    let calcPoints goalsFor goalsAgainst = 
-        if goalsFor > goalsAgainst then 3
-        elif goalsFor = goalsAgainst then 1 
-        else 0
+    let calcPoints result = 
+        match result with
+        | Win -> 3
+        | Draw -> 1
+        | Loss -> 0
 
     let order standings = 
         standings
@@ -124,18 +176,19 @@ module Program =
                     Console.ForegroundColor <- orig)
                         
         // Print table heading
-        cprintfn ConsoleColor.Red "%-30s %-2s %-3s %-3s %-3s %-2s" "Team" "Pd" "GD" "GF" "GA" "Pt"
+        cprintfn ConsoleColor.Red "%-3s %-30s %-2s %-3s %-3s %-3s %-2s" "Pos" "Team" "Pd" "GD" "GF" "GA" "Pt"
 
-        let printRow result = printfn "%-30s %2i %3i %3i %3i %2i" result.Team result.GamesPlayed result.GoalDifference result.GoalsFor result.GoalsAgainst result.Points
+        let printRow pos result = printfn "%-3i %-30s %2i %3i %3i %3i %2i" (pos+1) result.Team result.GamesPlayed result.GoalDifference result.GoalsFor result.GoalsAgainst result.Points
 
         // Print results
-        table |> Seq.iter printRow 
+        table |> Seq.iteri printRow 
 
     [<EntryPoint>]
     let main args =
        
         // Load data for Premier league games
         PremierLeague.getData()
+        |> Seq.filter (fun r -> r.PlayedOn < DateTime.Now.AddDays(-14.0) )
         |> Seq.toList
         // Add all the games from the data source
         |> Games.toResults PremierLeague.calcPoints
